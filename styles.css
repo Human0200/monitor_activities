@@ -1,0 +1,448 @@
+        /* General Styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f5f6f7;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .form-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="date"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 150px;
+        }
+
+        label {
+            font-size: 14px;
+            color: #555;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+        .button-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .button-link img {
+            margin-right: 5px;
+            width: 16px;
+            height: 16px;
+        }
+
+        .button-link.instruction-button {
+            background-color: #ff9800;
+        }
+
+        .button-link.support-button {
+            background-color: #4caf50;
+        }
+
+        .main-menu {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .main-checkboxes div {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .main-checkboxes input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #eaeaea;
+            cursor: pointer;
+        }
+
+        th.sortable:hover {
+            background-color: #dcdcdc;
+        }
+
+        th span {
+            font-size: 12px;
+            margin-left: 5px;
+        }
+
+        /* Loading Message */
+        #loadingMessage {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .loading-gif {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Overlay */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .overlay.active {
+            display: flex;
+        }
+
+        .deal-row {
+            font-weight: bold;
+        }
+
+        .activity-row,
+        .task-row {
+            padding-left: 20px;
+        }
+
+        .comment {
+            font-style: italic;
+            color: gray;
+        }
+
+        .row-even {
+            background-color: #F5F5DC;
+        }
+
+        .row-odd {
+            background-color: #72caf3;
+        }
+
+        .sortable {
+            cursor: pointer;
+        }
+
+        .form-row {
+            margin-bottom: 10px;
+        }
+
+        .pipeline-filters {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: nowrap;
+            /* Добавлено, чтобы элементы не переносились */
+        }
+
+        .pipeline-filters details {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            /* Выравнивание по центру */
+        }
+
+        .pipeline-filters details summary {
+            display: inline-block;
+            margin-right: 10px;
+            /* Отступ между summary и остальными элементами */
+            cursor: pointer;
+            /* Курсор в виде руки при наведении */
+            padding: 5px 30px 5px 10px;
+            /* Отступы для кнопки, увеличен правый отступ */
+            background-color: #72caf3;
+            /* Голубой фон */
+            border: 2px solid black;
+            /* Черная граница */
+            border-radius: 6px;
+            /* Скругленные углы */
+            font-weight: bold;
+            /* Жирный шрифт */
+            position: relative;
+            /* Для позиционирования стрелочки */
+            margin-bottom: 10px;
+            /* Отступ снизу */
+        }
+
+        .pipeline-filters details summary::after {
+            content: '▼';
+            /* Стрелочка вниз */
+            position: absolute;
+            right: 10px;
+            /* Отступ справа */
+            top: 50%;
+            /* Центрирование по вертикали */
+            transform: translateY(-50%);
+            /* Центрирование по вертикали */
+            font-size: 12px;
+            /* Размер стрелочки */
+        }
+
+        .pipeline-filters details[open] summary::after {
+            content: '▲';
+            /* Стрелочка вверх при раскрытии */
+        }
+
+        .pipeline-filters span {
+            display: inline-flex;
+            /* Используем inline-flex для выравнивания */
+            align-items: center;
+            /* Выравнивание по центру по вертикали */
+            margin-right: 10px;
+            /* Отступ между чекбоксами */
+            margin-bottom: 10px;
+            /* Отступ снизу для каждого чекбокса */
+        }
+
+        .form-row label {
+            margin-right: 10px;
+        }
+
+        .form-row input[type="date"],
+        .form-row input[type="checkbox"] {
+            margin-right: 20px;
+        }
+
+        input[type="date"] {
+            background-color: #f2f2f2;
+            /* Светло-серый фон */
+            border: 2px solid black;
+            color: #333;
+            /* Темно-серый текст */
+            padding: 2px 4px;
+            /* Отступы */
+            font-size: 12px;
+            /* Размер шрифта */
+            border-radius: 5px;
+            /* Скругленные углы */
+            font-weight: bold;
+            /* Жирный шрифт */
+            display: inline-flex;
+            /* Используем flexbox для выравнивания */
+            align-items: center;
+            /* Выравнивание по центру по вертикали */
+            height: 32px;
+            /* Устанавливаем фиксированную высоту */
+            box-sizing: border-box;
+            /* Включаем границы и отступы в общую высоту */
+            position: relative;
+            /* Относительное позиционирование */
+            top: 0px;
+            /* Поднятие вверх */
+        }
+
+        input[type="date"]::placeholder {
+            color: #3b7981;
+            /* Цвет текста плейсхолдера */
+            font-weight: normal;
+            /* Обычный шрифт для плейсхолдера */
+        }
+
+        input[type="date"]:focus {
+            border-color: #61b8f1;
+            /* Голубая граница при фокусе */
+            outline: none;
+            /* Убираем стандартное выделение */
+            box-shadow: 0 0 5px rgba(76, 175, 175, 0.5);
+            /* Тень при фокусе */
+        }
+
+        .button-link {
+            background-color: #72caf3;
+            /* Голубой фон */
+            border: 2px solid black;
+            color: rgb(0, 0, 0);
+            /* Черный текст */
+            padding: 10px 20px;
+            /* Отступы */
+            text-align: center;
+            /* Выравнивание текста по центру */
+            text-decoration: none;
+            /* Убираем подчеркивание текста */
+            display: inline-flex;
+            /* Используем flexbox для выравнивания */
+            align-items: center;
+            /* Выравнивание по центру по вертикали */
+            font-size: 14px;
+            /* Размер шрифта */
+            margin: 4px 2px;
+            /* Отступы между кнопками */
+            cursor: pointer;
+            /* Курсор в виде руки при наведении */
+            border-radius: 6px;
+            /* Скругленные углы */
+            font-weight: bold;
+            /* Жирный шрифт */
+        }
+
+        .button-link:hover {
+            background-color: #3b7981;
+            /* Темно-зеленый фон при наведении */
+        }
+
+        .button-link img {
+            margin-right: 8px;
+            /* Отступ справа от иконки */
+            width: 22px;
+            /* Ширина иконки */
+            height: 22px;
+            /* Высота иконки */
+        }
+
+        .support-button {
+            background-color: #6ceca1;
+            /* Зеленый фон */
+        }
+
+        .support-button:hover {
+            background-color: #45a049;
+            /* Темно-зеленый фон при наведении */
+        }
+
+        .support-button img {
+            width: 18px;
+            /* Ширина иконки */
+            height: auto;
+            /* Автоматическая высота для сохранения пропорций */
+        }
+
+        .instruction {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+        }
+
+        .instruction-button {
+            background-color: #6cecd0;
+            /* Зеленый фон */
+        }
+
+        .instruction-button:hover {
+            background-color: #324933;
+            /* Темно-зеленый фон при наведении */
+        }
+
+        .loading-gif {
+            width: 95px;
+            /* Задайте нужную ширину */
+            height: 35px;
+            /* Задайте нужную высоту */
+        }
+
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .popup-header h2 {
+            margin: 0;
+        }
+
+        .popup-body {
+            margin-top: 20px;
+        }
+
+        .popup-footer {
+            margin-top: 20px;
+            text-align: right;
+        }
+
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        .pipeline-button {
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #72caf3;
+            border: 2px solid black;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .pipeline-button:hover {
+            background-color: #3b7981;
+        }
+
+        .stage-column {
+            display: inline-block;
+            vertical-align: top;
+            width: 45%;
+            margin: 10px;
+        }
+
+        .stage-column h3 {
+            text-align: center;
+        }
+
+        .popup-body.scrollable {
+            max-height: 400px;
+            /* Ограничиваем высоту всплывающего окна */
+            overflow-y: auto;
+            /* Включаем вертикальную прокрутку */
+        }
+
+        .stage-column {
+            margin-bottom: 20px;
+            /* Добавляем отступ между колонками */
+        }

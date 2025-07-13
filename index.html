@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Таблица сделок и активностей</title>
+    <script src="https://api.bitrix24.com/api/v1/"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="form-row">
+        С
+        <input type="date" id="dateFrom" name="dateFrom">
+        По
+        <input type="date" id="dateTo" name="dateTo">
+        <label for="includeLeads">Включать поиск по лидам:</label>
+        <input type="checkbox" id="includeLeads" name="includeLeads">
+        <button type="submit" onclick="applyFilters()" class="button-link">
+            <img src="http://bg59.online/We/enter.png" alt="Иконка enter">
+            Применить фильтры
+        </button>
+        <button type="button" id="exportButton" class="button-link">
+            <img src="http://bg59.online/We/excel.png" alt="Иконка Excel">
+            Excel
+        </button>
+        <button type="button" onclick="showInstruction()" class="button-link instruction-button">
+            <img src="http://bg59.online/We/inst.png" alt="Иконка инструкция">
+            Инструкция
+        </button>
+        <a href="https://bg59.ru/#b4494" target="_blank" class="button-link support-button">
+            <img src="http://bg59.online/We/support.png" alt="Иконка тех.поддержка">
+            Поддержка
+        </a>
+    </div>
+    
+    <div class="pipeline-filters">
+        <div id="pipelineFilters"></div>
+        <div class="main-menu">
+            <button type="button" onclick="toggleAllSettings()" class="button-link">
+                <img src="http://bg59.online/We/settings.png" alt="Иконка настроек">
+                Настроить стадии воронок
+            </button>
+            <div class="main-checkboxes">
+                <div>
+                    <input type="checkbox" id="inProgressFilter">
+                    <label for="inProgressFilter">В работе</label>
+                </div>
+                <div>
+                    <input type="checkbox" id="failFilter">
+                    <label for="failFilter">Провальная</label>
+                </div>
+                <div>
+                    <input type="checkbox" id="successFilter">
+                    <label for="successFilter">Успешная</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <label for="usersFilter">Фильтр по пользователям:</label>
+    <select id="usersFilter" name="usersFilter" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <option value="">Выберите пользователя</option>
+    </select>
+    
+    <div id="loadingMessage" style="display: none;">
+        <b>Загрузка...</b>
+        <img src="https://bg59.online/We/download.gif" alt="Загрузка..." class="loading-gif">
+    </div>
+    
+    <table id="dealsTable" border="1">
+        <thead>
+            <tr>
+                <th>Тип</th>
+                <th>Название</th>
+                <th>Активити</th>
+                <th>Детали</th>
+                <th class="sortable" onclick="toggleSortOrder('deadline')">Крайний срок <span id="sortOrder-deadline">↑↓</span></th>
+                <th class="sortable" onclick="toggleSortOrder('creationDate')">Дата создания <span id="sortOrder-creationDate">↑↓</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Данные будут добавлены сюда -->
+        </tbody>
+    </table>
+    
+    <div id="overlay" class="overlay"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <script>
+        (function(w,d,u){
+                var s=d.createElement('script');s.async=true;s.src=u+'?'+(Date.now()/60000|0);
+                var h=d.getElementsByTagName('script')[0];h.parentNode.insertBefore(s,h);
+        })(window,document,'https://cdn-ru.bitrix24.ru/b17983416/crm/site_button/loader_14_8iqgv8.js');
+</script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    BX24.init(function() {
+        console.log("BX24 инициализирован");
+        BX24.callMethod(
+        "user.get",
+        {
+            filter:{
+                ACTIVE:"Y",
+            }
+        },
+        function(result) {
+            if (result.error()) {
+                console.error("Ошибка при получении пользователей:", result.error());
+            } else {
+                const selectElement = document.getElementById("usersFilter");
+                
+                // Очищаем предыдущие опции (если они есть)
+                selectElement.innerHTML = "";
+
+                // Добавляем дефолтную опцию
+                const defaultOption = document.createElement("option");
+                defaultOption.value = "";
+                defaultOption.text = "Выберите пользователя";
+                selectElement.appendChild(defaultOption);
+
+                // Перебираем данные о пользователях и добавляем их как опции
+                result.data().forEach(user => {
+                    const option = document.createElement("option");
+                    option.value = user.ID; // ID пользователя
+                    option.text = user.NAME + " " + user.LAST_NAME; // Имя и фамилия
+                    selectElement.appendChild(option);
+                });
+            }
+        }
+    );
+        getDealCategories();
+    });
+});
+
+function restoreCheckboxState() {
+    BX24.callMethod(
+        'app.option.get',
+        {},
+        function(result) {
+            if (result.error()) {
+                console.error("Ошибка при восстановлении состояния чекбоксов:", result.error());
+            } else {
+                const options = result.data();
+                if (options.checkboxStates) {
+                    const checkboxStates = JSON.parse(options.checkboxStates);
+                    console.log("Восстановление состояния чекбоксов:", checkboxStates);
+                    applyCheckboxState(checkboxStates);
+                }
+            }
+        }
+    );
+}
+
+function applyCheckboxState(checkboxStates) {
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        if (checkboxStates.hasOwnProperty(checkbox.id)) {
+            checkbox.checked = checkboxStates[checkbox.id];
+            console.log(`Чекбокс ${checkbox.id} установлен в ${checkbox.checked}`);
+        } else {
+            console.log(`Чекбокс ${checkbox.id} не найден в сохраненных состояниях`);
+        }
+    });
+
+    // Применяем настройки после восстановления состояния чекбоксов
+    applySettings();
+}
+
+function updateStageSettings() {
+    document.querySelectorAll('.settings-popup input[type="checkbox"]').forEach(checkbox => {
+        const categoryId = checkbox.dataset.categoryId;
+        const stageId = checkbox.name.split('-')[1];
+        const statusType = checkbox.name.split('-')[2];
+
+        if (!stageSettings[categoryId]) {
+            stageSettings[categoryId] = {};
+        }
+        if (!stageSettings[categoryId][stageId]) {
+            stageSettings[categoryId][stageId] = { inProgress: false, fail: false, success: false };
+        }
+
+        stageSettings[categoryId][stageId][statusType] = checkbox.checked;
+    });
+
+    console.log("Обновленные настройки стадий:", stageSettings);
+}
+
+let dealsData = [];
+let dealStages = {};
+let categories = [];
+let stageSettings = {}; // Объект для хранения настроек стадий
+let sortColumn = 'deadline';
+let pendingRequests = 0; // Счетчик ожидающих запросов
+
+function getDealCategories() {
+    BX24.callMethod(
+        "crm.dealcategory.list",
+        {},
+        function(result) {
+            if (result.error()) {
+                console.error("Ошибка при получении категорий сделок:", result.error());
+            } else {
+                categories = result.data();
+                categories.push({ ID: '0', NAME: 'Основная воронка' }); // Добавляем основную воронку
+                if (result.more()) {
+                    result.next();
+                } else {
+                    getDealStages();
+                }
+            }
+        }
+    );
+}
+
+function getDealStages() {
+        let pendingRequests = categories.length;
+        console.log(categories);
+        categories.forEach(category => {
+            BX24.callMethod(
+                "crm.dealcategory.stage.list",
+                { id: category.ID },
+                function(result) {
+                    if (result.error()) {
+                        console.error(`Ошибка при получении стадий сделок для категории ${category.NAME}:`, result.error());
+                    } else {
+                        result.data().forEach(stage => {
+                            if (!dealStages[category.ID]) {
+                                dealStages[category.ID] = [];
+                            }
+                            dealStages[category.ID].push(stage);
+                        });
+
+                        if (result.more()) {
+                            result.next();
+                        } else {
+                            pendingRequests--;
+                            if (pendingRequests === 0) {
+                                renderPipelineSettings(); // Рендерим кнопки для открытия настроек воронок
+                            }
+                        }
+                    }
+                }
+            );
+        });
+    }
+
+function renderPipelineSettings() {
+    const container = document.createElement('div');
+    container.id = 'pipelineSettingsContainer';
+
+    const settingsContainer = document.createElement('div');
+    settingsContainer.id = 'allSettings';
+    settingsContainer.style.display = 'none';
+
+    categories.forEach(category => {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'category-settings';
+
+        const categoryTitle = document.createElement('h3');
+        categoryTitle.innerText = category.NAME;
+        categoryDiv.appendChild(categoryTitle);
+
+        const settingsDiv = document.createElement('div');
+        settingsDiv.id = `settings-${category.ID}`;
+        settingsDiv.className = 'settings-popup';
+
+        if (dealStages[category.ID]) {
+            dealStages[category.ID].forEach(stage => {
+                const stageDiv = document.createElement('div');
+                const stageLabel = document.createElement('label');
+                stageLabel.innerHTML = `<strong>${stage.NAME}</strong>`;
+
+                const inProgressCheckbox = document.createElement('input');
+                inProgressCheckbox.type = 'checkbox';
+                inProgressCheckbox.name = `stage-${stage.STATUS_ID}-inProgress`;
+                inProgressCheckbox.dataset.categoryId = category.ID;
+                inProgressCheckbox.id = `stage-${stage.STATUS_ID}-inProgress`;
+
+                const failCheckbox = document.createElement('input');
+                failCheckbox.type = 'checkbox';
+                failCheckbox.name = `stage-${stage.STATUS_ID}-fail`;
+                failCheckbox.dataset.categoryId = category.ID;
+                failCheckbox.id = `stage-${stage.STATUS_ID}-fail`;
+
+                const successCheckbox = document.createElement('input');
+                successCheckbox.type = 'checkbox';
+                successCheckbox.name = `stage-${stage.STATUS_ID}-success`;
+                successCheckbox.dataset.categoryId = category.ID;
+                successCheckbox.id = `stage-${stage.STATUS_ID}-success`;
+
+                // Добавляем обработчики событий для сохранения состояния при изменении
+                inProgressCheckbox.addEventListener('change', () => {
+                    saveCheckboxState();
+                    updateStageSettings();
+                });
+                failCheckbox.addEventListener('change', () => {
+                    saveCheckboxState();
+                    updateStageSettings();
+                });
+                successCheckbox.addEventListener('change', () => {
+                    saveCheckboxState();
+                    updateStageSettings();
+                });
+
+                stageDiv.appendChild(stageLabel);
+                stageDiv.appendChild(document.createElement('br'));
+                stageDiv.appendChild(inProgressCheckbox);
+                stageDiv.appendChild(document.createTextNode(' В работе '));
+                stageDiv.appendChild(document.createElement('br'));
+                stageDiv.appendChild(failCheckbox);
+                stageDiv.appendChild(document.createTextNode(' Провальная '));
+                stageDiv.appendChild(document.createElement('br'));
+                stageDiv.appendChild(successCheckbox);
+                stageDiv.appendChild(document.createTextNode(' Успешная '));
+
+                settingsDiv.appendChild(stageDiv);
+
+                // Заполняем stageSettings
+                if (!stageSettings[category.ID]) {
+                    stageSettings[category.ID] = {};
+                }
+                stageSettings[category.ID][stage.STATUS_ID] = {
+                    inProgress: inProgressCheckbox.checked,
+                    fail: failCheckbox.checked,
+                    success: successCheckbox.checked
+                };
+            });
+        }
+
+        categoryDiv.appendChild(settingsDiv);
+        settingsContainer.appendChild(categoryDiv);
+    });
+
+    container.appendChild(settingsContainer);
+    document.body.appendChild(container);
+
+    // Логируем stageSettings после рендеринга
+    console.log("stageSettings после рендеринга:", stageSettings);
+
+    // Восстанавливаем состояние чекбоксов после их рендеринга
+    restoreCheckboxState();
+}
+
+function toggleAllSettings() {
+    const settingsContainer = document.getElementById('allSettings');
+    settingsContainer.style.display = settingsContainer.style.display === 'none' ? 'block' : 'none';
+    let dealsTableBody = document.querySelector('#dealsTable tbody');
+    while (dealsTableBody.firstChild) {
+        dealsTableBody.removeChild(dealsTableBody.firstChild);
+    }
+}
+
+function applySettings() {
+    // Обновляем настройки стадий на основе текущего состояния чекбоксов
+    document.querySelectorAll('.settings-popup input[type="checkbox"]').forEach(checkbox => {
+        const categoryId = checkbox.dataset.categoryId;
+        const [stageId, type] = checkbox.name.replace('stage-', '').split('-');
+
+        if (!stageSettings[categoryId]) {
+            stageSettings[categoryId] = {};
+        }
+        if (!stageSettings[categoryId][stageId]) {
+            stageSettings[categoryId][stageId] = {};
+        }
+
+        stageSettings[categoryId][stageId][type] = checkbox.checked;
+    });
+
+    // Логируем stageSettings для проверки
+    console.log("Настройки применены");
+    console.log("Текущие настройки стадий:", stageSettings);
+
+    // Сохраняем состояние чекбоксов в хранилище Bitrix24
+    saveCheckboxState();
+}
+
+function saveCheckboxState() {
+    const checkboxStates = {};
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkboxStates[checkbox.id] = checkbox.checked;
+    });
+
+    console.log("Состояние чекбоксов для сохранения:", checkboxStates);
+
+    BX24.callMethod(
+        'app.option.set',
+        { 'options': { 'checkboxStates': JSON.stringify(checkboxStates) } },
+        function(result) {
+            if (result.error()) {
+                console.error("Ошибка при сохранении состояния чекбоксов:", result.error());
+            } else {
+                console.log("Состояние чекбоксов успешно сохранено");
+            }
+        }
+    );
+}
+
+function getDealsAndLeads() {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+
+    if (!dateFrom && !dateTo) {
+        alert("Укажите хотя бы одну дату!");
+        return;
+    }
+
+    if (!dateFrom) {
+        dateFrom = dateTo;
+    }
+
+    if (!dateTo) {
+        dateTo = dateFrom;
+    }
+
+    var date = new Date(dateTo);
+    date.setDate(date.getDate() + 1);
+    dateTo = date.toISOString().split('T')[0];
+
+    const includeLeads = document.getElementById('includeLeads').checked;
+
+    console.log(dateFrom);
+    console.log(dateTo);
+
+    let filter = {};
+    if (dateFrom) filter[">=DATE_MODIFY"] = dateFrom;
+    if (dateTo) filter["<=DATE_MODIFY"] = dateTo;
+    const selectElement = document.getElementById("usersFilter");
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    const selectedValue = selectedOption.value;
+    if(selectedOption.value !="")
+    filter["ASSIGNED_BY_ID"] = selectedValue;
+
+    // Собираем выбранные воронки
+    const selectedPipelines = Array.from(document.querySelectorAll('.pipeline-filters input[type="checkbox"]:checked'))
+        .map(checkbox => checkbox.value)
+        .filter(id => id !== 'on'); // Исключаем некорректные значения
+    console.log("Выбранные воронки:", selectedPipelines);
+
+    if (selectedPipelines.length > 0) {
+        filter["CATEGORY_ID"] = selectedPipelines;
+    }
+
+    document.getElementById('loadingMessage').style.display = 'block';
+
+    const inProgressFilter = document.getElementById('inProgressFilter').checked;
+    const failFilter = document.getElementById('failFilter').checked;
+    const successFilter = document.getElementById('successFilter').checked;
+
+    let stageIds = [];
+
+    for (const categoryId in stageSettings) {
+        for (const stageId in stageSettings[categoryId]) {
+            const stage = stageSettings[categoryId][stageId];
+            if ((inProgressFilter && stage.inProgress) ||
+                (failFilter && stage.fail) ||
+                (successFilter && stage.success)) {
+                stageIds.push(stageId);
+            }
+        }
+    }
+
+    // Логируем stageSettings и stageIds для проверки
+    console.log("Текущие настройки стадий:", stageSettings);
+    console.log("Сформированные stageIds:", stageIds);
+
+    if (stageIds.length > 0) {
+        filter["=STAGE_ID"] = stageIds;
+    }
+    pendingRequests = 1; // Увеличиваем счетчик ожидающих запросов
+
+    // Логируем запрос перед отправкой
+    console.log("Запрос на получение сделок:", {
+        order: { "DATE_MODIFY": "ASC" },
+        filter: filter,
+        select: ["ID", "TITLE", "STAGE_ID", "CATEGORY_ID", "DATE_MODIFY"]
+    });
+    if(inProgressFilter || failFilter || successFilter) {
+
+        BX24.callMethod(
+        "crm.deal.list",
+        {
+            order: { "DATE_MODIFY": "ASC" },
+            filter: filter,
+            select: ["ID", "TITLE", "STAGE_ID", "CATEGORY_ID", "DATE_MODIFY"]
+        },
+        function(result) {
+            if (result.error()) {
+                console.error("Ошибка при получении сделок:", result.error());
+            } else {
+                let deals = result.data();
+                console.log("Полученные сделки:", deals);
+                deals.forEach(deal => {
+                    dealsData.push({ deal: deal, activities: [], tasks: [], comments: [], type: "Сделка" });
+                    renderTable(); // Обновляем таблицу после добавления каждой сделки
+                    getActivities(deal, 2);
+                    getTasks(deal, "D_");
+                    getTimelineComments(deal, 2);
+                });
+
+                if (result.more() || result.length > 50) {
+                    result.next();
+                } else {
+                    pendingRequests--;
+                    checkLoadingComplete();
+                }
+            }
+        }
+    );
+        
+    }else{
+        console.log("GGGGGGGGGGGGGG:",inProgressFilter);
+        pendingRequests--;
+        checkLoadingComplete();
+    }
+
+    if (includeLeads) {
+        pendingRequests++; // Увеличиваем счетчик ожидающих запросов
+
+        // Логируем запрос перед отправкой
+        console.log("Запрос на получение лидов:", {
+            order: { "DATE_MODIFY": "ASC" },
+            filter: filter,
+            select: ["ID", "TITLE", "STATUS_ID", "DATE_MODIFY"]
+        });
+
+        BX24.callMethod(
+            "crm.lead.list",
+            {
+                order: { "DATE_MODIFY": "ASC" },
+                filter: filter,
+                select: ["ID", "TITLE", "STATUS_ID", "DATE_MODIFY"]
+            },
+            function(result) {
+                if (result.error()) {
+                    console.error("Ошибка при получении лидов:", result.error());
+                } else {
+                    let leads = result.data();
+                    console.log("Полученные лиды:", leads);
+                    leads.forEach(lead => {
+                        dealsData.push({ deal: lead, activities: [], tasks: [], comments: [], type: "Лид" });
+                        renderTable(); // Обновляем таблицу после добавления каждого лида
+                        getActivities(lead, 1);
+                        getTasks(lead, "L_");
+                        getTimelineComments(lead, 1);
+                    });
+
+                    if (result.more()) {
+                        result.next();
+                    } else {
+                        pendingRequests--;
+                        checkLoadingComplete();
+                    }
+                }
+            }
+        );
+    }
+}
+
+function checkLoadingComplete() {
+    if (pendingRequests === 0) {
+        document.getElementById('loadingMessage').style.display = 'none';
+    }
+}
+
+// CSS стили для всплывающих окон
+const style = document.createElement('style');
+style.innerHTML = `
+    .settings-popup {
+        position: relative;
+        background-color: white;
+        border: 1px solid #ccc;
+        padding: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+    }
+    .category-settings {
+        margin-bottom: 20px;
+    }
+    .category-settings h3 {
+        margin: 0;
+        padding: 10px 0;
+    }
+`;
+document.head.appendChild(style);
+  
+function getActivities(deal, entityTypeId) {
+    pendingRequests++;
+    BX24.callMethod(
+        "crm.activity.list",
+        {
+            filter: { "OWNER_ID": deal.ID, "OWNER_TYPE_ID": entityTypeId,"PROVIDER_ID": "CRM_TODO" },
+            select: ["ID", "TYPE_ID", "SUBJECT", "DESCRIPTION", "DEADLINE", "CREATED"]
+        },
+        function(result) {
+            if(result.error()) {
+                console.error("Ошибка при получении активностей:", result.error());
+            } else {
+                let activities = result.data();
+
+                    let dealData = dealsData.find(d => d.deal.ID === deal.ID);
+                    if (dealData) {
+                        dealData.activities = activities;
+                        renderTable(); // Обновляем таблицу после получения активностей
+                    }
+                
+
+                if(result.more()) {
+                    result.next();
+                } else {
+                    pendingRequests--;
+                    checkLoadingComplete();
+                }
+            }
+        }
+    );
+}
+
+function getTasks(deal, prefix) {
+    pendingRequests++;
+    BX24.callMethod(
+        "tasks.task.list",
+        {
+            filter: { "UF_CRM_TASK": prefix + deal.ID },
+            select: ["ID", "TITLE", "DESCRIPTION", "RESPONSIBLE_ID", "DEADLINE", "CREATED_DATE"]
+        },
+        function(result) {
+            if(result.error()) {
+                console.error("Ошибка при получении задач:", result.error());
+            } else {
+                let tasks = result.data().tasks; // Исправлено: result.data().tasks
+                let dealData = dealsData.find(d => d.deal.ID === deal.ID);
+                if (dealData) {
+                    if (tasks && Array.isArray(tasks)) {
+                        tasks.forEach(task => {
+                            dealData.tasks.push(task);
+                            getTaskComments(deal.ID, task.id, task.responsibleId); // Исправлено: task.id на task.ID и task.responsibleId на task.RESPONSIBLE_ID
+                        });
+                    } else {
+                        console.error(`Неверный формат данных задач для ${prefix === "D_" ? 'сделки' : 'лида'} ${deal.ID}:`, tasks);
+                    }
+
+                    if(result.more()) {
+                        result.next();
+                    } else {
+                        pendingRequests--;
+                        checkLoadingComplete();
+                    }
+                }
+            }
+        }
+    );
+}
+
+function getTaskComments(dealId, taskId, responsibleId) {
+    BX24.callMethod(
+        "task.commentitem.getlist",
+        {
+            taskId: taskId
+        },
+        function(result) {
+            if(result.error()) {
+                console.error("Ошибка при получении комментариев:", result.error());
+            } else {
+                let comments = result.data();
+                let dealData = dealsData.find(d => d.deal.ID === dealId);
+                if (dealData) {
+                    let task = dealData.tasks.find(t => t.id === taskId); // Исправлено: t.id на t.ID
+                    if (task) {
+                        task.comments = comments.filter(comment => comment.AUTHOR_ID == responsibleId);
+                    }
+
+                    if(result.more()) {
+                        result.next();
+                    } else {
+                        renderTable();
+                    }
+                }
+            }
+        }
+    );
+}
+
+function getTimelineComments(deal, entityTypeId) {
+    pendingRequests++;
+            const entityType = entityTypeId === 2 ? "deal" : "lead"; // 2 - ID для сделок, 1 - ID для лидов
+    
+            BX24.callMethod(
+                "crm.timeline.comment.list",
+                {
+                    filter: { "ENTITY_ID": deal.ID, "ENTITY_TYPE": entityType },
+                    select: ["ID", "COMMENT", "CREATED"]
+                },
+                function(result) {
+                    if(result.error()) {
+                        console.error("Ошибка при получении комментариев из таймлайна:", result.error());
+                    } else {
+                        let comments = result.data();
+                        let dealData = dealsData.find(d => d.deal.ID === deal.ID);
+                        if (dealData) {
+                            comments.forEach(comment => {
+                                dealData.comments.push(comment);
+                            });
+    
+                            if(result.more()) {
+                                result.next();
+                            } else {
+                                //renderTable();
+                                pendingRequests--;
+                                checkLoadingComplete();
+                            }
+                        }
+                    }
+                }
+            );
+        }
+
+    
+      
+        function getActivityType(typeId) {
+            const activityTypes = {
+                1: "Задача",
+                3: "Встреча"
+            };
+            return activityTypes[typeId] || "Универсальное дело";
+        }
+    
+      
+        function renderTable() {
+     const tableBody = document.getElementById("dealsTable").getElementsByTagName('tbody')[0];
+     tableBody.innerHTML = "";
+
+     rowsToRender = dealsData.length;
+     rowsRendered = 0;
+
+     dealsData.forEach((dealData, index) => {
+         addDealRow(dealData.deal, dealData.type, index);
+         if (dealData.activities) {
+             rowsToRender += dealData.activities.length;
+             dealData.activities.forEach(activity => {
+                 addActivityRow(dealData.deal.ID, getActivityType(activity.TYPE_ID), activity.SUBJECT, activity.DESCRIPTION, activity.DEADLINE, activity.CREATED, index);
+             });
+         }
+         if (dealData.tasks) {
+             rowsToRender += dealData.tasks.length;
+             dealData.tasks.forEach(task => {
+                 addTaskRow(dealData.deal.ID, task, index);
+                 if (task.comments) {
+                     rowsToRender += task.comments.length;
+                     task.comments.forEach(comment => {
+                         addCommentToTask(dealData.deal.ID, task.id, comment, index); // Исправлено: task.id на task.ID
+                     });
+                 }
+             });
+         }
+         if (dealData.comments) {
+             rowsToRender += dealData.comments.length;
+             dealData.comments.forEach(comment => {
+                 addTimelineCommentRow(dealData.deal.ID, comment, index);
+             });
+         }
+     });
+
+     checkLoadingComplete();
+}
+
+function checkLoadingComplete() {
+    if (pendingRequests === 0) {
+        // Скрыть сообщение загрузки после завершения всех запросов
+        document.getElementById('loadingMessage').style.display = 'none';
+    }
+}
+        function showInstruction(){
+
+            let dealsTableBody = document.querySelector('#dealsTable tbody');
+    while (dealsTableBody.firstChild) {
+        dealsTableBody.removeChild(dealsTableBody.firstChild);
+    }
+                                        // Проверяем, существует ли уже блок с инструкцией
+                if (!document.querySelector('.instruction')) {
+                    // Добавляем инструкцию по приложению
+                    var instructionElem = document.createElement('div');
+                    instructionElem.className = 'instruction';
+                    instructionElem.innerHTML = `
+                        <h2>Инструкция по использованию приложения</h2>
+                        <p><b>Обращаем внимание, что сделки показываются с выбранной даты изменения, то есть, если сделка не изменялась за выбранный период(например: не перемещалась по стадиям или не изменялись поля), то в списке она отображена не будет!!! </b></p>
+                        <p><b>Чтобы фильтры “В работе”, “Провальная” и “Успешная” начали работать, необходимо настроить стадии сделок, выбрав для каждой стадии соответствующий тип (“В работе”, “Успешная” или “Провальная”). Это делается вручную, автоматически настройка не происходит. </b></p>
+                        <p> Нажмите на "Крайний срок" или "Дата создания", чтобы произвести сортировку либо по убыванию, либо по возрастанию.</p>
+                        <p><b> Сделки и лиды без каких-либо активностей не сортируются!</b></p>
+                        <p>На каждую сделку можно нажать, чтобы перейти вовнутрь сделки.</p>
+                        <p>1. Для отображения списка активностей по сделкам необходимо выбрать хотя бы одну дату(вторая дата подставится автоматически - такая же дата, что и была выбрана).</p>
+                        <p>2. Нажмите на кнопку "Выберите воронки" и выберите нужные воронки, по которым необходимо показать сделки и активности по ним.</p>
+                        <p>3. Поставьте галочку на "Включать поиск по лидам", если это необходимо.</p>
+                        <p>4. Нажмите на кнопку "Применить фильтры" и немного подождите. Если у вас много сделок и активностей по ним - процесс составления таблицы может занять какое-то время.</p>
+                        <p>5. Нажмите на кнопку "Excel" для экспорта данных в файл Excel.</p>
+                        <p>6. Нажмите на кнопку "Инструкция" для показа инструкции, сгенерированная таблица сотрётся.</p>
+                        <p><b>7. Нажмите на кнопку "Поддержка", если у вас возникли вопросы или вы хотите, чтобы мы дополнили вам функционал.</b></p>
+                    `;
+                    document.body.appendChild(instructionElem);
+                }
+        }
+    
+        
+        function addDealRow(deal, type, index) {
+    const table = document.getElementById("dealsTable").getElementsByTagName('tbody')[0];
+    const newRow = table.insertRow();
+    newRow.classList.add("deal-row");
+    newRow.id = `deal-${deal.ID}`;
+
+    if (index % 2 === 0) {
+        newRow.classList.add("row-even");
+    } else {
+        newRow.classList.add("row-odd");
+    }
+
+    const cellType = newRow.insertCell(0);
+    const cellTitle = newRow.insertCell(1);
+    const cellActivity = newRow.insertCell(2);
+    const cellDetails = newRow.insertCell(3);
+    const cellDeadline = newRow.insertCell(4);
+    const cellCreationDate = newRow.insertCell(5); // Новый столбец
+
+    cellType.textContent = type;
+
+    BX24.init(function() {
+    const portalUrl = BX24.getDomain();
+    const link = document.createElement('a');
+    link.href = '#'; // Устанавливаем href в #
+    link.textContent = deal.TITLE;
+    link.addEventListener('click', (event) => {
+        event.preventDefault(); // Предотвращаем переход по ссылке
+
+        // Выводим переменные в консоль для отладки
+        console.log(`Portal URL: ${portalUrl}`);
+        console.log(`Deal ID: ${deal.ID}`);
+        console.log(`Type: ${type}`);
+
+        BX24.openPath(
+            `/crm/${type === "Сделка" ? "deal" : "lead"}/details/${deal.ID}/`,
+            function(result) {
+                console.log(result);
+            }
+        );
+    });
+    cellTitle.appendChild(link);
+});
+
+    cellActivity.textContent = "";
+    cellDetails.textContent = "";
+    cellDeadline.textContent = "";
+    cellCreationDate.textContent = deal.DATE_CREATE ? new Date(deal.DATE_CREATE).toLocaleDateString() : ""; // Дата создания
+
+    checkLoadingComplete();
+}
+
+function addActivityRow(dealId, activity, subject, description, deadline, creationDate, index) {
+    const table = document.getElementById("dealsTable").getElementsByTagName('tbody')[0];
+    const newRow = table.insertRow();
+    newRow.classList.add("activity-row");
+
+    const dealRow = document.getElementById(`deal-${dealId}`);
+    if (dealRow.classList.contains("row-even")) {
+        newRow.classList.add("row-even");
+    } else {
+        newRow.classList.add("row-odd");
+    }
+
+    const cellType = newRow.insertCell(0);
+    const cellTitle = newRow.insertCell(1);
+    const cellActivity = newRow.insertCell(2);
+    const cellDetails = newRow.insertCell(3);
+    const cellDeadline = newRow.insertCell(4);
+    const cellCreationDate = newRow.insertCell(5); // Новый столбец
+
+    cellType.textContent = "";
+    cellTitle.textContent = "";
+    cellActivity.textContent = activity;
+    cellDetails.textContent = subject + " - " + description;
+    cellDeadline.textContent = deadline ? new Date(deadline).toLocaleDateString() : "";
+    cellCreationDate.textContent = creationDate ? new Date(creationDate).toLocaleDateString() : ""; // Дата создания
+
+    dealRow.parentNode.insertBefore(newRow, dealRow.nextSibling);
+
+    checkLoadingComplete();
+}
+
+function addTaskRow(dealId, task, index) {
+    const table = document.getElementById("dealsTable").getElementsByTagName('tbody')[0];
+    const newRow = table.insertRow();
+    newRow.classList.add("task-row");
+    newRow.id = `task-${task.id}`;
+
+    const dealRow = document.getElementById(`deal-${dealId}`);
+    if (dealRow.classList.contains("row-even")) {
+        newRow.classList.add("row-even");
+    } else {
+        newRow.classList.add("row-odd");
+    }
+
+    const cellType = newRow.insertCell(0);
+    const cellTitle = newRow.insertCell(1);
+    const cellActivity = newRow.insertCell(2);
+    const cellDetails = newRow.insertCell(3);
+    const cellDeadline = newRow.insertCell(4);
+    const cellCreationDate = newRow.insertCell(5); // Новый столбец
+
+    cellType.textContent = "";
+    cellTitle.textContent = "";
+    cellActivity.textContent = "Задача";
+    cellDetails.textContent = task.title + " - " + task.description;
+    cellDeadline.textContent = task.deadline ? new Date(task.deadline).toLocaleDateString() : "";
+    cellCreationDate.textContent = task.createdDate ? new Date(task.createdDate).toLocaleDateString() : ""; // Дата создания
+
+    dealRow.parentNode.insertBefore(newRow, dealRow.nextSibling);
+
+    checkLoadingComplete();
+}
+
+function addCommentToTask(dealId, taskId, comment, index) {
+    const taskRow = document.getElementById(`task-${taskId}`);
+    const cellDetails = taskRow.cells[3];
+    const commentDiv = document.createElement("div");
+    commentDiv.classList.add("comment");
+    commentDiv.textContent = comment.POST_MESSAGE;
+    cellDetails.appendChild(commentDiv);
+
+    checkLoadingComplete();
+}
+function addTimelineCommentRow(dealId, comment, index) {
+     const table = document.getElementById("dealsTable").getElementsByTagName('tbody')[0];
+     const newRow = table.insertRow();
+     newRow.classList.add("timeline-comment-row");
+
+     // Добавляем класс для чередования цветов строк
+     const dealRow = document.getElementById(`deal-${dealId}`);
+     if (dealRow.classList.contains("row-even")) {
+         newRow.classList.add("row-even");
+     } else {
+         newRow.classList.add("row-odd");
+     }
+
+     const cellType = newRow.insertCell(0);
+     const cellTitle = newRow.insertCell(1);
+     const cellActivity = newRow.insertCell(2);
+     const cellDetails = newRow.insertCell(3);
+     const cellDeadline = newRow.insertCell(4);
+     const cellCreationDate = newRow.insertCell(5); // Новый столбец
+
+     cellType.textContent = "";
+     cellTitle.textContent = "";
+     cellActivity.textContent = "Комментарий";
+     cellDetails.textContent = comment.COMMENT;
+     cellDeadline.textContent = comment.CREATED ? new Date(comment.CREATED).toLocaleDateString() : "";
+     cellCreationDate.textContent = comment.CREATED ? new Date(comment.CREATED).toLocaleDateString() : "";
+
+     // Вставляем строку комментария после строки сделки
+     dealRow.parentNode.insertBefore(newRow, dealRow.nextSibling);
+
+    // checkLoadingComplete();
+}
+    
+function sortTable() {
+    dealsData.sort((a, b) => {
+        let aValue, bValue;
+
+        if (sortColumn === 'deadline') {
+            aValue = getEarliestDeadline(a);
+            bValue = getEarliestDeadline(b);
+        } else if (sortColumn === 'creationDate') {
+            aValue = getEarliestCreationDate(a);
+            bValue = getEarliestCreationDate(b);
+        }
+
+        if (aValue && bValue) {
+            return sortOrder === 'asc' ? new Date(aValue) - new Date(bValue) : new Date(bValue) - new Date(aValue);
+        } else if (aValue) {
+            return sortOrder === 'asc' ? -1 : 1;
+        } else if (bValue) {
+            return sortOrder === 'asc' ? 1 : -1;
+        } else {
+            return 0;
+        }
+    });
+
+    renderTable();
+}
+    
+       
+function toggleSortOrder(column) {
+    if (sortColumn === column) {
+        sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortColumn = column;
+        sortOrder = 'asc';
+    }
+
+    // Обновление всех элементов сортировки
+    document.querySelectorAll('.sortable span').forEach(span => {
+        span.textContent = '';
+    });
+
+    // Обновление текущего элемента сортировки
+    const sortOrderElement = document.getElementById(`sortOrder-${column}`);
+    if (sortOrderElement) {
+        sortOrderElement.textContent = sortOrder === 'asc' ? '↑' : '↓';
+    }
+
+    sortTable();
+}
+
+function getEarliestCreationDate(dealData) {
+    let creationDates = [];
+
+    if (dealData.activities) {
+        dealData.activities.forEach(activity => {
+            if (activity.CREATED) {
+                creationDates.push(new Date(activity.CREATED));
+            }
+        });
+    }
+
+    if (dealData.tasks) {
+        dealData.tasks.forEach(task => {
+            if (task.createdDate) {
+                creationDates.push(new Date(task.createdDate));
+            }
+        });
+    }
+
+    if (dealData.comments) {
+        dealData.comments.forEach(comment => {
+            if (comment.CREATED) {
+                creationDates.push(new Date(comment.CREATED));
+            }
+        });
+    }
+
+    if (creationDates.length > 0) {
+        return sortOrder === 'asc' ? new Date(Math.min.apply(null, creationDates)) : new Date(Math.max.apply(null, creationDates));
+    } else {
+        return null;
+    }
+}
+function getEarliestDeadline(dealData) {
+    let deadlines = [];
+
+    if (dealData.activities) {
+        dealData.activities.forEach(activity => {
+            if (activity.DEADLINE) {
+                deadlines.push(new Date(activity.DEADLINE));
+            }
+        });
+    }
+
+    if (dealData.tasks) {
+        dealData.tasks.forEach(task => {
+            if (task.deadline) {
+                deadlines.push(new Date(task.deadline));
+            }
+        });
+    }
+
+    if (dealData.comments) {
+        dealData.comments.forEach(comment => {
+            if (comment.CREATED) {
+                deadlines.push(new Date(comment.CREATED));
+            }
+        });
+    }
+
+    if (deadlines.length > 0) {
+        return sortOrder === 'asc' ? new Date(Math.min.apply(null, deadlines)) : new Date(Math.max.apply(null, deadlines));
+    } else {
+        return null;
+    }
+}
+function exportTableToExcel(dealsTable, filename = '') {
+    var tableSelect = document.getElementById(dealsTable);
+
+    // Проверяем наличие таблицы и количество строк
+    if (!tableSelect || tableSelect.rows.length <= 1) {
+        alert('Таблица не найдена или в ней недостаточно данных для экспорта.');
+        return;
+    }
+
+    var wb = XLSX.utils.table_to_book(tableSelect, { sheet: "Sheet1" });
+    var ws = wb.Sheets["Sheet1"];
+
+    // Устанавливаем перенос строк и автоширину для всех ячеек
+    var range = XLSX.utils.decode_range(ws['!ref']);
+    for (var R = range.s.r; R <= range.e.r; ++R) {
+        for (var C = range.s.c; C <= range.e.c; ++C) {
+            var cell_address = { c: C, r: R };
+            var cell_ref = XLSX.utils.encode_cell(cell_address);
+            if (!ws[cell_ref]) continue;
+
+            // Устанавливаем перенос строк
+            ws[cell_ref].s = {
+                alignment: {
+                    wrapText: true,
+                    vertical: "top"
+                }
+            };
+        }
+    }
+
+    // Устанавливаем автоширину для всех колонок
+    var colWidths = [];
+    for (var C = range.s.c; C <= range.e.c; ++C) {
+        var maxWidth = 10;
+        for (var R = range.s.r; R <= range.e.r; ++R) {
+            var cell_address = { c: C, r: R };
+            var cell_ref = XLSX.utils.encode_cell(cell_address);
+            if (!ws[cell_ref]) continue;
+
+            var cellValue = ws[cell_ref].v;
+            if (cellValue) {
+                var cellWidth = cellValue.toString().length;
+                if (cellWidth > maxWidth) {
+                    maxWidth = cellWidth;
+                }
+            }
+        }
+        colWidths.push({ wch: maxWidth });
+    }
+    ws['!cols'] = colWidths;
+
+    filename = filename ? filename + '.xlsx' : 'excel_data.xlsx';
+    XLSX.writeFile(wb, filename);
+}
+
+document.getElementById('exportButton').addEventListener('click', function() {
+    exportTableToExcel('dealsTable', 'data');
+});
+
+
+function applyFilters() {
+    const inProgressFilter = document.getElementById('inProgressFilter').checked;
+    const failFilter = document.getElementById('failFilter').checked;
+    const successFilter = document.getElementById('successFilter').checked;
+
+    console.log("Состояние основных чекбоксов:");
+    console.log("В работе:", inProgressFilter);
+    console.log("Провальная:", failFilter);
+    console.log("Успешная:", successFilter);
+
+    console.log("Состояние чекбоксов для стадий, соответствующих выбранным фильтрам:");
+
+    for (const categoryId in stageSettings) {
+        for (const stageId in stageSettings[categoryId]) {
+            const stage = stageSettings[categoryId][stageId];
+            if ((inProgressFilter && stage.inProgress) ||
+                (failFilter && stage.fail) ||
+                (successFilter && stage.success)) {
+                console.log(`Категория ${categoryId}, Стадия ${stageId}:`);
+                console.log(" В работе:", stage.inProgress || false);
+                console.log(" Провальная:", stage.fail || false);
+                console.log(" Успешная:", stage.success || false);
+            }
+        }
+    }
+    dealsData = [];
+    getDealsAndLeads();
+}
+
+function loadPipelines() {
+    let allPipelines = [];
+    
+    function fetchPipelines(start) {
+        BX24.callMethod(
+            "crm.dealcategory.list",
+            { start: start },
+            function(result) {
+                if (result.error()) {
+                    console.error(result.error());
+                } else {
+                    allPipelines = allPipelines.concat(result.data());
+                    if (result.more()) {
+                        fetchPipelines(result.answer.next);
+                    } else {
+                        allPipelines.push({ ID: '0', NAME: 'Основная воронка' });
+                        
+                        console.log("Полученные воронки:", allPipelines);
+                        let pipelineFilters = document.getElementById('pipelineFilters');
+                        let details = document.createElement('details');
+                        let summary = document.createElement('summary');
+                        summary.innerText = "Выберите воронки";
+                        details.appendChild(summary);
+
+                        let container = document.createElement('div');
+                        container.style.display = 'flex';
+                        container.style.flexWrap = 'nowrap';
+                        container.style.alignItems = 'center';
+
+                        allPipelines.forEach(pipeline => {
+                            let span = document.createElement('span');
+                            span.style.display = 'inline-flex';
+                            span.style.alignItems = 'center';
+                            span.style.marginRight = '10px';
+                            span.style.marginBottom = '10px'; /* Отступ снизу для каждого чекбокса */
+
+                            let checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.id = `pipeline_${pipeline.ID}`;
+                            checkbox.value = pipeline.ID; // Убедитесь, что значение устанавливается правильно
+                            let label = document.createElement('label');
+                            label.htmlFor = `pipeline_${pipeline.ID}`;
+                            label.innerText = pipeline.NAME;
+
+                            span.appendChild(checkbox);
+                            span.appendChild(label);
+                            container.appendChild(span);
+                        });
+
+                        details.appendChild(container);
+                        pipelineFilters.appendChild(details);
+                    }
+                }
+            }
+        );
+    }
+
+    fetchPipelines(0);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    loadPipelines();
+});
+</script>
+
+</body>
+</html>
